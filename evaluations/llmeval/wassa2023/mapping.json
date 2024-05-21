@@ -1,0 +1,10 @@
+{
+  "conversation": {
+    "name": "Conversation",
+    "category": "conversation"
+  },
+  "essay": {
+    "name": "Essay",
+    "category": "Essay"
+  }
+}
