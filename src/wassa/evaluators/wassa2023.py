@@ -721,25 +721,25 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             "PER": {
                 "name": "essay writer",
                 "label_key": [
-                    "conscientiousness",
-                    "openess",
-                    "extraversion",
-                    "agreeableness",
-                    "stability"
+                    "personality_conscientiousness",
+                    "personality_openess",
+                    "personality_extraversion",
+                    "personality_agreeableness",
+                    "personality_stability"
                 ],
                 "template": WASSA2023EvalTemplate(
                     name="writer_conscientiousness",
                     instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n"
-                                "1. conscientiousness:\n"
-                                "2. openness\n"
-                                "3. extraversion\n"
-                                "4. agreeableness\n"
-                                "5. stability\n"
+                                "1. personality_conscientiousness:\n"
+                                "2. personality_openess\n"
+                                "3. personality_extraversion\n"
+                                "4. personality_agreeableness\n"
+                                "5. personality_stability\n"
                                 "\n",
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {\"conscientiousness\": 1.3, \"openess\": 3.6, \"extraversion\": 4.3, \"agreeableness\": 3.6, \"stability\": 4.3}\n"
+                          "  {\"personality_conscientiousness\": 1.3, \"personality_openess\": 3.6, \"personality_extraversion\": 4.3, \"personality_agreeableness\": 3.6, \"personality_stability\": 4.3}\n"
                           "```",
                 ),
                 "category": "PER"
@@ -747,23 +747,23 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             "IRI": {
                 "name": "Perspective-taking of the essay writer",
                 "label_key": [
-                    "perspective_taking",
-                    "personal_distress",
-                    "fantasy",
-                    "empathatic_concern"
+                    "iri_perspective_taking",
+                    "iri_personal_distress",
+                    "iri_fantasy",
+                    "iri_empathatic_concern"
                 ],
                 "template": WASSA2023EvalTemplate(
                     name="writer_perspective_taking",
                     instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n"
-                                "1. perspective_taking\n"
-                                "2. personal_distress\n"
-                                "3. fantasy\n"
-                                "4. empathatic_concern\n"
+                                "1. iri_perspective_taking\n"
+                                "2. iri_personal_distress\n"
+                                "3. iri_fantasy\n"
+                                "4. iri_empathatic_concern\n"
                                 "\n",
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {\"perspective_taking\": 1.3, \"personal_distress\": 3.6, \"fantasy\": 4.3, \"empathatic_concern\": 3.6}\n"
+                          "  {\"iri_perspective_taking\": 1.3, \"iri_personal_distress\": 3.6, \"iri_fantasy\": 4.3, \"iri_empathatic_concern\": 3.6}\n"
                           "```",
                 ),
                 "category": "IRI"
@@ -820,6 +820,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                         support_set = dataset["train"].shuffle().select(
                             range(min(n_shot, len(dataset["train"]))))
                         target_data = dataset[split][i]
+                        logger.debug(target_data)
                         subject_name = self.categories[subject]["name"]
                         messages = eval_template.format_example(
                             target_data=target_data,
