@@ -706,7 +706,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             },
             "EMO": {
                 "name": "Emotion at the essay-level",
-                "label_key": "emotion",
+                "label_key": ["emotion"],
                 "template": WASSA2023EvalTemplate(
                     name="essay_emotion",
                     instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} from one or more emotion labels from the Ekman’s six basic emotions (sadness, joy, disgust, surprise, anger, or fear) as well as neutral. The essay expresses the emotion:\n\n",
