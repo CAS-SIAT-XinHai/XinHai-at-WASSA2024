@@ -119,14 +119,14 @@ class WASSA2023(datasets.GeneratorBasedBuilder):
                     "age": datasets.Value("string"),
                     "income": datasets.Value("string"),
                     "personality_conscientiousness": datasets.Value("float32"),
-                    "personality_openess": datasets.Value("float32"),
+                    "personality_openness": datasets.Value("float32"),
                     "personality_extraversion": datasets.Value("float32"),
                     "personality_agreeableness": datasets.Value("float32"),
                     "personality_stability": datasets.Value("float32"),
                     "iri_perspective_taking": datasets.Value("float32"),
                     "iri_personal_distress": datasets.Value("float32"),
                     "iri_fantasy": datasets.Value("float32"),
-                    "iri_empathatic_concern": datasets.Value("float32"),
+                    "iri_empathetic_concern": datasets.Value("float32"),
                 }
             )
         return datasets.DatasetInfo(
@@ -164,14 +164,14 @@ class WASSA2023(datasets.GeneratorBasedBuilder):
                 "distress",
                 "emotion",
                 "personality_conscientiousness",
-                "personality_openess",
+                "personality_openness",
                 "personality_extraversion",
                 "personality_agreeableness",
                 "personality_stability",
                 "iri_perspective_taking",
                 "iri_personal_distress",
                 "iri_fantasy",
-                "iri_empathatic_concern"
+                "iri_empathetic_concern"
             ]
         else:
             raise ValueError
@@ -225,11 +225,11 @@ class WASSA2023(datasets.GeneratorBasedBuilder):
                 yield i, instance
         else:
             label_columns = ["empathy", "distress", "emotion", "personality_conscientiousness",
-                             "personality_openess", "personality_extraversion",
+                             "personality_openness", "personality_extraversion",
                              "personality_agreeableness",
                              "personality_stability", "iri_perspective_taking",
                              "iri_personal_distress",
-                             "iri_fantasy", "iri_empathatic_concern"]
+                             "iri_fantasy", "iri_empathetic_concern"]
 
             for i, instance in enumerate(merged_df.to_dict(orient="records")):
                 for k in label_columns:

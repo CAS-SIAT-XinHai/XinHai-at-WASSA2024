@@ -493,7 +493,7 @@ class WASSA2023Evaluator(BaseEvaluator):
             },
             "writer_openness": {
                 "name": "Openness to experience of the essay writer",
-                "label_key": "personality_openess",
+                "label_key": "personality_openness",
                 "template": WASSA2023EvalTemplate(
                     name="writer_openness",
                     instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n\n",
@@ -563,9 +563,9 @@ class WASSA2023Evaluator(BaseEvaluator):
             },
             "writer_empathic_concern": {
                 "name": "Empathic Concern of the essay writer",
-                "label_key": "iri_empathatic_concern",
+                "label_key": "iri_empathetic_concern",
                 "template": WASSA2023EvalTemplate(
-                    name="writer_empatheic_concern",
+                    name="writer_empathetic_concern",
                     instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n\n",
                     input="\nThe score for the Empathic Concern of the essay writer is ",
                 ),
@@ -722,7 +722,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                 "name": "essay writer",
                 "label_key": [
                     "personality_conscientiousness",
-                    "personality_openess",
+                    "personality_openness",
                     "personality_extraversion",
                     "personality_agreeableness",
                     "personality_stability"
@@ -731,7 +731,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     name="writer_conscientiousness",
                     instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n"
                                 "1. personality_conscientiousness:\n"
-                                "2. personality_openess\n"
+                                "2. personality_openness\n"
                                 "3. personality_extraversion\n"
                                 "4. personality_agreeableness\n"
                                 "5. personality_stability\n"
@@ -739,7 +739,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {\"personality_conscientiousness\": 1.3, \"personality_openess\": 3.6, \"personality_extraversion\": 4.3, \"personality_agreeableness\": 3.6, \"personality_stability\": 4.3}\n"
+                          "  {\"personality_conscientiousness\": 1.3, \"personality_openness\": 3.6, \"personality_extraversion\": 4.3, \"personality_agreeableness\": 3.6, \"personality_stability\": 4.3}\n"
                           "```",
                 ),
                 "category": "PER"
@@ -750,7 +750,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     "iri_perspective_taking",
                     "iri_personal_distress",
                     "iri_fantasy",
-                    "iri_empathatic_concern"
+                    "iri_empathetic_concern"
                 ],
                 "template": WASSA2023EvalTemplate(
                     name="writer_perspective_taking",
@@ -758,12 +758,12 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                                 "1. iri_perspective_taking\n"
                                 "2. iri_personal_distress\n"
                                 "3. iri_fantasy\n"
-                                "4. iri_empathatic_concern\n"
+                                "4. iri_empathetic_concern\n"
                                 "\n",
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {\"iri_perspective_taking\": 1.3, \"iri_personal_distress\": 3.6, \"iri_fantasy\": 4.3, \"iri_empathatic_concern\": 3.6}\n"
+                          "  {\"iri_perspective_taking\": 1.3, \"iri_personal_distress\": 3.6, \"iri_fantasy\": 4.3, \"iri_empathetic_concern\": 3.6}\n"
                           "```",
                 ),
                 "category": "IRI"
@@ -820,7 +820,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                         support_set = dataset["train"].shuffle().select(
                             range(min(n_shot, len(dataset["train"]))))
                         target_data = dataset[split][i]
-                        logger.debug(target_data)
+                        logger.debug(f"Example: {target_data}")
                         subject_name = self.categories[subject]["name"]
                         messages = eval_template.format_example(
                             target_data=target_data,
