@@ -797,6 +797,10 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
         return query, resp
 
     def run(self, split, n_shot, output_dir, num_retries=5):
+        ref_dir = os.path.join(output_dir, split, "ref")
+        res_dir = os.path.join(output_dir, split, "res")
+        ret_dir = os.path.join(output_dir, split, "ret")
+        [os.makedirs(d, exist_ok=True) for d in [ref_dir, res_dir, ret_dir]]
 
         pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
         logger.debug("=============================================================")
@@ -812,7 +816,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             category = self.categories[subject]['category']
             label_key = self.categories[subject]['label_key']
 
-            task_file = os.path.join(output_dir, "res", f"predictions_{category}.tsv")
+            task_file = os.path.join(res_dir, f'predictions_{category}.tsv')
             if not os.path.exists(task_file):
                 with open(task_file, "w") as fd:
                     for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
@@ -845,14 +849,10 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                             "\t".join(map(lambda x: x if isinstance(x, str) else "{:.2f}".format(x), result)) + "\n")
 
         if split == "validation":
-            os.makedirs(os.path.join(output_dir, "ref"), exist_ok=True)
-            os.makedirs(os.path.join(output_dir, "res"), exist_ok=True)
-            os.makedirs(os.path.join(output_dir, "ret"), exist_ok=True)
-
             with zipfile.ZipFile(os.path.join(self.task_dir, self.task, f'{self.task}.zip')) as zd:
                 for filename in zd.namelist():
                     if filename in ['goldstandard_dev.tsv', 'goldstandard_CONV_dev.tsv']:
-                        with open(os.path.join(output_dir, "ref", filename.replace("_dev", "")), 'wb') as fd:
+                        with open(os.path.join(ref_dir, filename.replace("_dev", "")), 'wb') as fd:
                             with zd.open(filename) as f:
                                 fd.write(f.read())
-            score(output_dir, os.path.join(output_dir, 'ret'))
+            score(output_dir, ret_dir)
