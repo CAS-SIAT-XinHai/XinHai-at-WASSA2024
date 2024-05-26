@@ -611,7 +611,7 @@ class WASSA2023Evaluator(BaseEvaluator):
                 label = "{:.2f}".format(label)
             return "\n\n".join([article] + [essay] + [template.input] + [return_json]), label
 
-    def run(self, split, n_shot, input_dir, output_dir, num_retries=5):
+    def run(self, split, n_shot, output_dir, num_retries=5):
         pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
         results = {}
         logger.debug("=============================================================")
@@ -812,7 +812,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             category = self.categories[subject]['category']
             label_key = self.categories[subject]['label_key']
 
-            with open(os.path.join(output_dir, "ref", f"predictions_{category}.tsv"), "w") as fd:
+            with open(os.path.join(output_dir, "res", f"predictions_{category}.tsv"), "w") as fd:
                 for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
                     logger.debug("---------------------------------------------------------------")
                     support_set = dataset["train"].shuffle().select(
@@ -848,7 +848,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             with zipfile.ZipFile(os.path.join(self.task_dir, self.task, f'{self.task}.zip')) as zd:
                 for filename in zd.namelist():
                     if filename in ['goldstandard_dev.tsv', 'goldstandard_CONV_dev.tsv']:
-                        with open(os.path.join(output_dir, "res", filename.replace("_dev", "")), 'wb') as fd:
+                        with open(os.path.join(output_dir, "ref", filename.replace("_dev", "")), 'wb') as fd:
                             with zd.open(filename) as f:
                                 fd.write(f.read())
             score(output_dir, os.path.join(output_dir, 'ret'))
