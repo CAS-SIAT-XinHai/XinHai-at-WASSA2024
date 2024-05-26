@@ -682,7 +682,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {{\"EmotionalPolarity\": 1.3, \"Emotion\": 3.6, \"Empathy\": 4.3}}\n"
+                          "  {\"EmotionalPolarity\": 1.3, \"Emotion\": 3.6, \"Empathy\": 4.3}\n"
                           "```",
                 ),
                 "category": "CONV"
@@ -699,7 +699,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {{\"empathy\": 5.8, \"distress\": 2.5}}\n"
+                          "  {\"empathy\": 5.8, \"distress\": 2.5}\n"
                           "```",
                 ),
                 "category": "EMP"
@@ -713,7 +713,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {{\"emotion\": \"disgust\"}}\n"
+                          "  {\"emotion\": \"disgust\"}\n"
                           "```",
                 ),
                 "category": "EMO"
@@ -739,7 +739,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {{\"conscientiousness\": 1.3, \"openess\": 3.6, \"extraversion\": 4.3, \"agreeableness\": 3.6, \"stability\": 4.3}}\n"
+                          "  {\"conscientiousness\": 1.3, \"openess\": 3.6, \"extraversion\": 4.3, \"agreeableness\": 3.6, \"stability\": 4.3}\n"
                           "```",
                 ),
                 "category": "PER"
@@ -763,7 +763,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {{\"perspective_taking\": 1.3, \"personal_distress\": 3.6, \"fantasy\": 4.3, \"empathatic_concern\": 3.6}}\n"
+                          "  {\"perspective_taking\": 1.3, \"personal_distress\": 3.6, \"fantasy\": 4.3, \"empathatic_concern\": 3.6}\n"
                           "```",
                 ),
                 "category": "IRI"
@@ -812,33 +812,35 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             category = self.categories[subject]['category']
             label_key = self.categories[subject]['label_key']
 
-            with open(os.path.join(output_dir, "res", f"predictions_{category}.tsv"), "w") as fd:
-                for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
-                    logger.debug("---------------------------------------------------------------")
-                    support_set = dataset["train"].shuffle().select(
-                        range(min(n_shot, len(dataset["train"]))))
-                    target_data = dataset[split][i]
-                    subject_name = self.categories[subject]["name"]
-                    messages = eval_template.format_example(
-                        target_data=target_data,
-                        support_set=support_set,
-                        subject_name=subject_name,
-                        label_key=label_key,
-                        dataset_name=dataset_name,
-                        use_history=True,
-                        parse_func=self.parse_example
-                    )
+            task_file = os.path.join(output_dir, "res", f"predictions_{category}.tsv")
+            if not os.path.exists(task_file):
+                with open(task_file, "w") as fd:
+                    for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
+                        logger.debug("---------------------------------------------------------------")
+                        support_set = dataset["train"].shuffle().select(
+                            range(min(n_shot, len(dataset["train"]))))
+                        target_data = dataset[split][i]
+                        subject_name = self.categories[subject]["name"]
+                        messages = eval_template.format_example(
+                            target_data=target_data,
+                            support_set=support_set,
+                            subject_name=subject_name,
+                            label_key=label_key,
+                            dataset_name=dataset_name,
+                            use_history=True,
+                            parse_func=self.parse_example
+                        )
 
-                    result = None
-                    while not result:
-                        response = self.prompt_for_response(messages, num_retries)
-                        try:
-                            result = [response[k] for k in label_key]
-                            logger.debug(result)
-                        except Exception as e:
-                            logger.warning(f"Error response for {subject}: {response}, {e}")
+                        result = None
+                        while not result:
+                            response = self.prompt_for_response(messages, num_retries)
+                            try:
+                                result = [response[k] for k in label_key]
+                                logger.debug(result)
+                            except Exception as e:
+                                logger.warning(f"Error response for {subject}: {response}, {e}")
 
-                    fd.write("\t".join(map(lambda x: "{:.2f}".format(x), result)) + "\n")
+                        fd.write("\t".join(map(lambda x: "{:.2f}".format(x), result)) + "\n")
 
         if split == "validation":
             os.makedirs(os.path.join(output_dir, "ref"), exist_ok=True)
