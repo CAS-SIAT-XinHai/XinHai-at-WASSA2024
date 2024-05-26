@@ -840,7 +840,8 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                             except Exception as e:
                                 logger.warning(f"Error response for {subject}: {response}, {e}")
 
-                        fd.write("\t".join(map(lambda x: "{:.2f}".format(x), result)) + "\n")
+                        fd.write(
+                            "\t".join(map(lambda x: x if isinstance(x, str) else "{:.2f}".format(x), result)) + "\n")
 
         if split == "validation":
             os.makedirs(os.path.join(output_dir, "ref"), exist_ok=True)
