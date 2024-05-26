@@ -94,9 +94,9 @@ class BaseEvaluator(object):
                         if isinstance(d, dict) and len(d) > 0:
                             return d
                         else:
-                            logger.error(f"Evaluation {evaluate_ans} error:", d)
+                            logger.error(f"Evaluation {evaluate_ans} error.")
                     except Exception as e:
-                        logger.error(f"Evaluation {evaluate_ans} error:", e)
+                        logger.error(f"Evaluation {evaluate_ans} error: {e}")
             # num_retries -= 1
 
     @abstractmethod
