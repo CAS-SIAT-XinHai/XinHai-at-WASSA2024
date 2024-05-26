@@ -1,13 +1,11 @@
 import json
 import logging
-import os
 import re
 from abc import abstractmethod
 from collections import Counter
+from typing import Dict, Tuple
 
-from datasets import load_dataset
 from openai import OpenAI, OpenAIError
-from tqdm import tqdm, trange
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +48,17 @@ class BaseEvaluator(object):
     def task_mapping(self):
         raise NotImplementedError
 
+    @classmethod
+    @abstractmethod
+    def parse_example(
+            cls,
+            template,
+            example: Dict[str, str],
+            label_key,
+            dataset_name
+    ) -> Tuple[str, str]:
+        raise NotImplementedError
+
     @staticmethod
     def chat_completion(client, model, messages):
         try:
@@ -90,41 +99,6 @@ class BaseEvaluator(object):
                         logger.error(f"Evaluation {evaluate_ans} error:", e)
             # num_retries -= 1
 
-    def run(self, split, n_shot, num_retries=5):
-        pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
-        results = {}
-        logger.debug("=============================================================")
-        outputs = {}
-        for subject in pbar:
-            dataset_name = self.task_mapping[self.categories[subject]['category']]
-            dataset = load_dataset(
-                path=os.path.join(self.task_dir, self.task),
-                name=dataset_name,
-            )
-            pbar.set_postfix_str(self.categories[subject]["name"])
-            eval_template = self.categories[subject]['template']
-
-            category = self.categories[subject]['category']
-            outputs.setdefault(category, {})
-
-            label_key = self.categories[subject]['label_key']
-            inputs, labels = [], []
-            for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
-                logger.debug("---------------------------------------------------------------")
-                support_set = dataset["train"].shuffle().select(
-                    range(min(n_shot, len(dataset["train"]))))
-                target_data = dataset[split][i]
-                subject_name = self.categories[subject]["name"]
-                messages = eval_template.format_example(
-                    target_data=target_data,
-                    support_set=support_set,
-                    subject_name=subject_name,
-                    label_key=label_key,
-                    dataset_name=dataset_name,
-                    use_history=True,
-                )
-
-                response = self.prompt_for_response(messages, num_retries)
-
-                outputs[category].setdefault(label_key, [])
-                outputs[category][label_key].append(response[label_key])
+    @abstractmethod
+    def run(self, split, n_shot, output_dir, num_retries=5):
+        raise NotImplementedError

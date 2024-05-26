@@ -1,13 +1,20 @@
+import json
+import logging
 import os
 import os.path
 import sys
+import zipfile
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
+from datasets import load_dataset
 from math import sqrt
+from tqdm import tqdm, trange
 
 from . import register_evaluator
 from .base import BaseEvaluator
+
+logger = logging.getLogger(__name__)
 
 # Participants are given a new dataset of empathic reactions to news stories and associated conversations which contains essays in reaction to news articles where there is harm to a person, group, or other (from Omitaomu et al. 2022, similar to Buechel et al. 2018).
 # Those essays contain Batson empathic concern and personal distress scores, as well as the Big Five personality and Inter-Personal Index (IRI) scores of each user.
@@ -350,38 +357,6 @@ class WASSA2023EvalTemplate:
     # essay: str
     input: str
 
-    def parse_example(
-            self,
-            example: Dict[str, str],
-            label_key,
-            dataset_name
-    ) -> Tuple[str, str]:
-        article = "\n[Article]\n{article}\n[End of Article]".format(article=example['article'])
-        return_json = f"""
-Provide your evaluation in JSON format, as shown in the example below.
-
-Example of Evaluation Output:
-```json
-{{"{label_key}": 0.8}}
-```
-        """
-        label = example[label_key]
-        if dataset_name == 'conversation':
-            conversation = "\n[Conversation]\n {history}\n[End of Conversation]".format(history=example['history'])
-            response = "\n[Response by Speaker {speaker_id}] {text} [End of Response by Speaker {speaker_id}]".format(
-                speaker_id=example['speaker_id'],
-                text=example['text'])
-            if isinstance(label, float):
-                label = "{:.2f}".format(label)
-            return "".join([article] + [conversation] + [response] + [self.input] + [return_json]), label
-        else:
-            essay = "\n[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
-                speaker_id=example['speaker_id'],
-                essay=example['essay'])
-            if isinstance(label, float):
-                label = "{:.2f}".format(label)
-            return "\n\n".join([article] + [essay] + [self.input] + [return_json]), label
-
     def format_example(
             self,
             target_data: Dict[str, str],
@@ -390,12 +365,13 @@ Example of Evaluation Output:
             label_key: str,
             dataset_name: str,
             use_history: bool,
+            parse_func
     ) -> list[list[dict[str, str] | dict[str, str]] | dict[str, str]]:
         """
         use_history: whether to use history or not.
         """
-        query, resp = self.parse_example(target_data, label_key=label_key, dataset_name=dataset_name)
-        history = [self.parse_example(support_set[k], label_key=label_key, dataset_name=dataset_name) for k in
+        query, resp = parse_func(self, target_data, label_key=label_key, dataset_name=dataset_name)
+        history = [parse_func(self, support_set[k], label_key=label_key, dataset_name=dataset_name) for k in
                    range(len(support_set))]
 
         if len(history):
@@ -600,3 +576,279 @@ class WASSA2023Evaluator(BaseEvaluator):
     @property
     def task_mapping(self):
         return task_mapping
+
+    @classmethod
+    def parse_example(
+            cls,
+            template,
+            example: Dict[str, str],
+            label_key,
+            dataset_name
+    ) -> Tuple[str, str]:
+        article = "\n[Article]\n{article}\n[End of Article]".format(article=example['article'])
+        return_json = f"""
+    Provide your evaluation in JSON format, as shown in the example below.
+
+    Example of Evaluation Output:
+    ```json
+    {{"{label_key}": 0.8}}
+    ```
+            """
+        label = example[label_key]
+        if dataset_name == 'conversation':
+            conversation = "\n[Conversation]\n {history}\n[End of Conversation]".format(history=example['history'])
+            response = "\n[Response by Speaker {speaker_id}] {text} [End of Response by Speaker {speaker_id}]".format(
+                speaker_id=example['speaker_id'],
+                text=example['text'])
+            if isinstance(label, float):
+                label = "{:.2f}".format(label)
+            return "".join([article] + [conversation] + [response] + [template.input] + [return_json]), label
+        else:
+            essay = "\n[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
+                speaker_id=example['speaker_id'],
+                essay=example['essay'])
+            if isinstance(label, float):
+                label = "{:.2f}".format(label)
+            return "\n\n".join([article] + [essay] + [template.input] + [return_json]), label
+
+    def run(self, split, n_shot, input_dir, output_dir, num_retries=5):
+        pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
+        results = {}
+        logger.debug("=============================================================")
+        outputs = {}
+        for subject in pbar:
+            dataset_name = self.task_mapping[self.categories[subject]['category']]
+            dataset = load_dataset(
+                path=os.path.join(self.task_dir, self.task),
+                name=dataset_name,
+            )
+            pbar.set_postfix_str(self.categories[subject]["name"])
+            eval_template = self.categories[subject]['template']
+
+            category = self.categories[subject]['category']
+            outputs.setdefault(category, {})
+
+            label_key = self.categories[subject]['label_key']
+            inputs, labels = [], []
+            for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
+                logger.debug("---------------------------------------------------------------")
+                support_set = dataset["train"].shuffle().select(
+                    range(min(n_shot, len(dataset["train"]))))
+                target_data = dataset[split][i]
+                subject_name = self.categories[subject]["name"]
+                messages = eval_template.format_example(
+                    target_data=target_data,
+                    support_set=support_set,
+                    subject_name=subject_name,
+                    label_key=label_key,
+                    dataset_name=dataset_name,
+                    use_history=True,
+                    parse_func=self.parse_example
+                )
+
+                response = self.prompt_for_response(messages, num_retries)
+
+                outputs[category].setdefault(label_key, [])
+                outputs[category][label_key].append(response[label_key])
+
+
+@register_evaluator("wassa2023", "multi_scorer")
+class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
+
+    def __init__(self,
+                 task_dir,
+                 model_name,
+                 model_api_key,
+                 model_api_base,
+                 evaluator_name,
+                 evaluator_api_key,
+                 evaluator_api_base):
+        super().__init__(task_dir,
+                         model_name, model_api_key, model_api_base, evaluator_name, evaluator_api_key,
+                         evaluator_api_base)
+
+    @property
+    def categories(self):
+        return {
+            "CONV": {
+                "name": "at the speech-turn-level",
+                "label_key": ["EmotionalPolarity", "Emotion", "Empathy"],
+                "template": WASSA2023EvalTemplate(
+                    name="conversation",
+                    instruction="Read the conversation between speakers in reaction to a news article where there is harm to a person, group, or other. Try to predict:\n"
+                                "1. EmotionalPolarity: as a score from the range : 0 to 2 ;\n"
+                                "2. Emotion: as a score from the range : 1 to 5 ;\n"
+                                "3. Empathy: as a score from the range : 1 to 5 .\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {{\"EmotionalPolarity\": 1.3, \"Emotion\": 3.6, \"Empathy\": 4.3}}\n"
+                          "```",
+                ),
+                "category": "CONV"
+            },
+            "EMP": {
+                "name": "Empathy at the essay-level",
+                "label_key": ["empathy", "distress"],
+                "template": WASSA2023EvalTemplate(
+                    name="essay",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Empathy score is an average of 7-point scale ratings, representing each of the following states (warm, tender, sympathetic,softhearted, moved, compassionate). Try to predict:\n"
+                                "1. empathy as a score from the range : 1 to 7:\n"
+                                "2. distress as a score from the range : 1 to 7:\n"
+                                "\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {{\"empathy\": 5.8, \"distress\": 2.5}}\n"
+                          "```",
+                ),
+                "category": "EMP"
+            },
+            "EMO": {
+                "name": "Emotion at the essay-level",
+                "label_key": "emotion",
+                "template": WASSA2023EvalTemplate(
+                    name="essay_emotion",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} from one or more emotion labels from the Ekman’s six basic emotions (sadness, joy, disgust, surprise, anger, or fear) as well as neutral. The essay expresses the emotion:\n\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {{\"emotion\": \"disgust\"}}\n"
+                          "```",
+                ),
+                "category": "EMO"
+            },
+            "PER": {
+                "name": "essay writer",
+                "label_key": [
+                    "conscientiousness",
+                    "openess",
+                    "extraversion",
+                    "agreeableness",
+                    "stability"
+                ],
+                "template": WASSA2023EvalTemplate(
+                    name="writer_conscientiousness",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n"
+                                "1. conscientiousness:\n"
+                                "2. openness\n"
+                                "3. extraversion\n"
+                                "4. agreeableness\n"
+                                "5. stability\n"
+                                "\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {{\"conscientiousness\": 1.3, \"openess\": 3.6, \"extraversion\": 4.3, \"agreeableness\": 3.6, \"stability\": 4.3}}\n"
+                          "```",
+                ),
+                "category": "PER"
+            },
+            "IRI": {
+                "name": "Perspective-taking of the essay writer",
+                "label_key": [
+                    "perspective_taking",
+                    "personal_distress",
+                    "fantasy",
+                    "empathatic_concern"
+                ],
+                "template": WASSA2023EvalTemplate(
+                    name="writer_perspective_taking",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n"
+                                "1. perspective_taking\n"
+                                "2. personal_distress\n"
+                                "3. fantasy\n"
+                                "4. empathatic_concern\n"
+                                "\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {{\"perspective_taking\": 1.3, \"personal_distress\": 3.6, \"fantasy\": 4.3, \"empathatic_concern\": 3.6}}\n"
+                          "```",
+                ),
+                "category": "IRI"
+            }
+        }
+
+    @classmethod
+    def parse_example(
+            cls,
+            template,
+            example: Dict[str, str],
+            label_key,
+            dataset_name
+    ) -> Tuple[str, str]:
+        article = "[Article]\n{article}\n[End of Article]".format(article=example['article'])
+        label = {lk: "{:.2f}".format(example[lk]) if isinstance(example[lk], float) else example[lk] for lk in
+                 label_key}
+        if dataset_name == 'conversation':
+            conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=example['history'])
+            response = "[Response by Speaker {speaker_id}]\n{text}\n[End of Response by Speaker {speaker_id}]".format(
+                speaker_id=example['speaker_id'],
+                text=example['text'])
+            query, resp = "\n\n".join([article] + [conversation] + [response] + [template.input]), json.dumps(label)
+        else:
+            essay = "[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
+                speaker_id=example['speaker_id'],
+                essay=example['essay'])
+            query, resp = "\n\n".join([article] + [essay] + [template.input]), json.dumps(label)
+        logger.debug(query)
+        logger.debug(resp)
+        return query, resp
+
+    def run(self, split, n_shot, output_dir, num_retries=5):
+
+        pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
+        logger.debug("=============================================================")
+        for subject in pbar:
+            dataset_name = self.task_mapping[self.categories[subject]['category']]
+            dataset = load_dataset(
+                path=os.path.join(self.task_dir, self.task),
+                name=dataset_name,
+            )
+            pbar.set_postfix_str(self.categories[subject]["name"])
+            eval_template = self.categories[subject]['template']
+
+            category = self.categories[subject]['category']
+            label_key = self.categories[subject]['label_key']
+
+            with open(os.path.join(output_dir, "ref", f"predictions_{category}.tsv"), "w") as fd:
+                for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
+                    logger.debug("---------------------------------------------------------------")
+                    support_set = dataset["train"].shuffle().select(
+                        range(min(n_shot, len(dataset["train"]))))
+                    target_data = dataset[split][i]
+                    subject_name = self.categories[subject]["name"]
+                    messages = eval_template.format_example(
+                        target_data=target_data,
+                        support_set=support_set,
+                        subject_name=subject_name,
+                        label_key=label_key,
+                        dataset_name=dataset_name,
+                        use_history=True,
+                        parse_func=self.parse_example
+                    )
+
+                    result = None
+                    while not result:
+                        response = self.prompt_for_response(messages, num_retries)
+                        try:
+                            result = [response[k] for k in label_key]
+                            logger.debug(result)
+                        except Exception as e:
+                            logger.warning(f"Error response for {subject}: {response}, {e}")
+
+                    fd.write("\t".join(map(lambda x: "{:.2f}".format(x), result)) + "\n")
+
+        if split == "validation":
+            os.makedirs(os.path.join(output_dir, "ref"), exist_ok=True)
+            os.makedirs(os.path.join(output_dir, "res"), exist_ok=True)
+            os.makedirs(os.path.join(output_dir, "ret"), exist_ok=True)
+
+            with zipfile.ZipFile(os.path.join(self.task_dir, self.task, f'{self.task}.zip')) as zd:
+                for filename in zd.namelist():
+                    if filename in ['goldstandard_dev.tsv', 'goldstandard_CONV_dev.tsv']:
+                        with open(os.path.join(output_dir, "res", filename.replace("_dev", "")), 'wb') as fd:
+                            with zd.open(filename) as f:
+                                fd.write(f.read())
+            score(output_dir, os.path.join(output_dir, 'ret'))

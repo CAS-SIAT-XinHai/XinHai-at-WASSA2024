@@ -8,15 +8,16 @@ echo "${UUID}"
 CONDA_HOME=/home/tanminghuan/anaconda3
 CONDA_ENV=base
 
-OUTPUT_DIR="${WORK_DIR}"/output
+OUTPUT_DIR="${WORK_DIR}"/output/${UUID}
 mkdir -p "${OUTPUT_DIR}"
-log_file="${OUTPUT_DIR}"/${UUID}.txt
+log_file="${OUTPUT_DIR}"/logs.txt
 exec &> >(tee -a "$log_file")
 
 PID=$BASHPID
 echo "$PID"
 
-METHOD=baseline
+#METHOD=baseline
+METHOD=multi_scorer
 TASK=wassa2023
 SPLIT=validation
 
@@ -52,7 +53,7 @@ tmux new-session -d -s wassa_llm_$PID "$start_llm_script"
 sleep 10
 
 PYTHONPATH="${WORK_DIR}"/src python "${WORK_DIR}"/evaluate.py \
-  --task "${TASK}" --method "${METHOD}" --split "${SPLIT}" \
+  --task "${TASK}" --method "${METHOD}" --split "${SPLIT}" --debug \
   --task_dir "${WORK_DIR}"/evaluations/llmeval \
   --model_name Qwen1.5-7B-Chat \
   --model_api_key "EMPTY" \
