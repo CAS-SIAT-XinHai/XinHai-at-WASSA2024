@@ -55,6 +55,7 @@ sleep 10
 PYTHONPATH="${WORK_DIR}"/src python "${WORK_DIR}"/evaluate.py \
   --task "${TASK}" --method "${METHOD}" --split "${SPLIT}" --debug \
   --task_dir "${WORK_DIR}"/evaluations/llmeval \
+  --output_dir "${OUTPUT_DIR}" \
   --model_name Qwen1.5-7B-Chat \
   --model_api_key "EMPTY" \
   --model_api_base http://localhost:40001/v1 \
