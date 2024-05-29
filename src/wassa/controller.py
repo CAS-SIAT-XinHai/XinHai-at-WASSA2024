@@ -22,9 +22,11 @@ from fastapi.staticfiles import StaticFiles
 from more_itertools import sliced
 from openai import OpenAI
 
-from .config import CONTROLLER_HEART_BEAT_EXPIRATION, LOG_DIR, STATIC_PATH
+from .config import CONTROLLER_HEART_BEAT_EXPIRATION
 from .utils import build_logger, server_error_msg
 
+LOG_DIR = os.environ.get("LOG_DIR")
+STATIC_PATH = os.environ.get("STATIC_PATH")
 logger = build_logger("controller", "controller.log", LOG_DIR)
 
 

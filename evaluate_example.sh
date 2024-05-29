@@ -38,7 +38,7 @@ unset __conda_setup
 
 conda activate $CONDA_ENV
 
-start_controller_script="cd ${WORK_DIR}/src && python -m wassa.controller --host 0.0.0.0 --port 5000"
+start_controller_script="cd ${WORK_DIR}/src && LOG_DIR=${OUTPUT_DIR} STATIC_PATH=${WORK_DIR}/static python -m wassa.controller --host 0.0.0.0 --port 5000"
 echo "$start_controller_script"
 #screen -dmS start_webui_$PID bash -c "$start_webui_script"
 tmux new-session -d -s wassa_controller_$PID "$start_controller_script"
