@@ -28,8 +28,10 @@ from llamafactory.extras.misc import torch_gc
 from llamafactory.hparams import get_infer_args
 from sse_starlette import EventSourceResponse
 
-from ..config import LOG_DIR, WORKER_HEART_BEAT_INTERVAL
+from ..config import WORKER_HEART_BEAT_INTERVAL
 from ..utils import build_logger, pretty_print_semaphore
+
+LOG_DIR = os.environ.get("LOG_DIR")
 
 GB = 1 << 30
 

@@ -45,7 +45,7 @@ tmux new-session -d -s wassa_controller_$PID "$start_controller_script"
 
 sleep 10
 
-start_llm_script="cd ${WORK_DIR}/src && CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORK_DIR}/related_repos/LLaMA-Factory/src CONTROLLER_ADDRESS=http://localhost:5000 MODEL_NAME=Qwen1.5-7B-Chat WORKER_ADDRESS=http://localhost:40001 WORKER_HOST=0.0.0.0 WORKER_PORT=40001 python -m wassa.workers.llm  --model_name_or_path /data2/public/pretrained_models/Qwen1.5-7B-Chat   --template qwen --infer_backend vllm --vllm_enforce_eager --vllm_maxlen 8192"
+start_llm_script="cd ${WORK_DIR}/src && CUDA_VISIBLE_DEVICES=0 PYTHONPATH=${WORK_DIR}/related_repos/LLaMA-Factory/src LOG_DIR=${OUTPUT_DIR} CONTROLLER_ADDRESS=http://localhost:5000 MODEL_NAME=Qwen1.5-7B-Chat WORKER_ADDRESS=http://localhost:40001 WORKER_HOST=0.0.0.0 WORKER_PORT=40001 python -m wassa.workers.llm  --model_name_or_path /data2/public/pretrained_models/Qwen1.5-7B-Chat   --template qwen --infer_backend vllm --vllm_enforce_eager --vllm_maxlen 8192"
 echo "$start_llm_script"
 #screen -dmS start_llm_$PID bash -c "$start_llm_script"
 tmux new-session -d -s wassa_llm_$PID "$start_llm_script"
