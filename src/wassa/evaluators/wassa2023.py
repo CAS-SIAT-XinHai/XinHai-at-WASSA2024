@@ -855,4 +855,4 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                         with open(os.path.join(ref_dir, filename.replace("_dev", "")), 'wb') as fd:
                             with zd.open(filename) as f:
                                 fd.write(f.read())
-            score(output_dir, ret_dir)
+            score(os.path.join(output_dir, split), ret_dir)
