@@ -786,7 +786,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             response = "[Response by Speaker {speaker_id}]\n{text}\n[End of Response by Speaker {speaker_id}]".format(
                 speaker_id=example['speaker_id'],
                 text=example['text'])
-            query, resp = "\n\n".join([article] + [conversation] + [response] + [template.instructions + [template.input]), json.dumps(label)
+            query, resp = "\n\n".join([article] + [conversation] + [response] + [template.instructions] + [template.input]), json.dumps(label)
         else:
             essay = "[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
                 speaker_id=example['speaker_id'],
