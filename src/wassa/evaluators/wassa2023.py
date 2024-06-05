@@ -709,7 +709,7 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
                 "label_key": ["emotion"],
                 "template": WASSA2023EvalTemplate(
                     name="essay_emotion",
-                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} from one or more emotion labels from the Ekman’s six basic emotions (sadness, joy, disgust, surprise, anger, or fear) as well as neutral. The essay expresses the emotion:\n\n",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict Emotion at the essay-level from one or more emotion labels from the Ekman’s six basic emotions (sadness, joy, disgust, surprise, anger, or fear) as well as neutral. The essay expresses the emotion:\n\n",
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
@@ -786,12 +786,12 @@ class WASSA2023MultiScorerEvaluator(WASSA2023Evaluator):
             response = "[Response by Speaker {speaker_id}]\n{text}\n[End of Response by Speaker {speaker_id}]".format(
                 speaker_id=example['speaker_id'],
                 text=example['text'])
-            query, resp = "\n\n".join([article] + [conversation] + [response] + [template.input]), json.dumps(label)
+            query, resp = "\n\n".join([article] + [conversation] + [response] + [template.instructions + [template.input]), json.dumps(label)
         else:
             essay = "[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
                 speaker_id=example['speaker_id'],
                 essay=example['essay'])
-            query, resp = "\n\n".join([article] + [essay] + [template.input]), json.dumps(label)
+            query, resp = "\n\n".join([article] + [essay] + [template.instruction] + [template.input]), json.dumps(label)
         logger.debug(query)
         logger.debug(resp)
         return query, resp
