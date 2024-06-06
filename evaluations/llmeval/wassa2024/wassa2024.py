@@ -87,13 +87,13 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                 {
                     "conversation_id": datasets.Value("int32"),
                     "history": datasets.Value("string"),
-                    "text": datasets.Value("string"),
-                    "person_id_1": datasets.Value("string"),
+                    "person_id": datasets.Value("string"),
                     "article_id": datasets.Value("int32"),
                     "title": datasets.Value("string"),
                     "source": datasets.Value("string"),
                     "article": datasets.Value("string"),
-                    "Empathy": datasets.Value("float32"),
+                    "objectOfSuffering": datasets.Value("string"),
+                    "perceived_empathy": datasets.Value("float32"),
                 }
             )
         elif self.config.name == 'CONVT':
@@ -104,10 +104,11 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                     "turn_id": datasets.Value("int32"),
                     "history": datasets.Value("string"),
                     "text": datasets.Value("string"),
-                    "speaker_number": datasets.Value("string"),
                     "article_id": datasets.Value("int32"),
                     "speaker_id": datasets.Value("int32"),
-                    "essay_id": datasets.Value("int32"),
+                    "speaker": datasets.Value("string"),
+                    "person_id_1": datasets.Value("string"),
+                    "person_id_2": datasets.Value("string"),
                     "article": datasets.Value("string"),
                     "EmotionalPolarity": datasets.Value("float32"),
                     "Emotion": datasets.Value("float32"),
@@ -122,6 +123,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                 {
                     "conversation_id": datasets.Value("int32"),
                     "history": datasets.Value("string"),
+                    "person_id": datasets.Value("string"),
                     "article_id": datasets.Value("int32"),
                     "article": datasets.Value("string"),
                     "person_essay": datasets.Value("string"),
@@ -241,6 +243,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                 except KeyError:
                     print(f"Conversation {instance['conversation_id']} has no history")
                     instance['history'] = ""
+                instance['perceived_empathy'] = instance.pop("this_persons_perceived_empathy_of_other_person")
                 yield i, instance
         elif self.config.name == 'CONVT':
             df_conversations_turn.sort_values(['conversation_id', 'turn_id'], inplace=True)
