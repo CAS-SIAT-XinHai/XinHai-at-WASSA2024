@@ -1,0 +1,18 @@
+{
+  "CONVD": {
+    "name": "Conversation Dialogue Level",
+    "category": "CONVD"
+  },
+  "CONVT": {
+    "name": "Conversation Turn Level",
+    "category": "CONVT"
+  },
+  "EMP": {
+    "name": "Essay Level",
+    "category": "PER"
+  },
+  "PER": {
+    "name": "OCEAN",
+    "category": "PER"
+  }
+}
