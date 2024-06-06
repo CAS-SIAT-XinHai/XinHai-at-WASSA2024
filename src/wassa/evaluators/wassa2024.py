@@ -1,13 +1,20 @@
+import csv
+import logging
 import os
 import os.path
 import sys
+import zipfile
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
+from datasets import load_dataset
 from math import sqrt
+from tqdm import tqdm, trange
 
 from . import register_evaluator
 from .base import BaseEvaluator
+
+logger = logging.getLogger(__name__)
 
 # Participants are given a new dataset of empathic reactions to news stories and associated conversations which contains essays in reaction to news articles where there is harm to a person, group, or other (from Omitaomu and Tafreshi et al. 2023, similar to Buechel et al. 2018). Those essays contain Batson empathic concern and personal distress scores, as well as the Big Five personality (OCEAN) and Inter-Personal Index (IRI) scores of each user. This new dataset also contains conversations between two users that read the same article. Each of their speech turn has been annotated in perceived empathy, emotion polarity, and emotion intensity. The essays are between 300 and 800 characters in length. The conversations contains 11,788 speech turns. The dataset also includes the news articles and person-level demographic information (age, gender, ethnicity, income, education level).
 #
@@ -327,8 +334,8 @@ class WASSA2024EvalTemplate:
         return query.strip(), resp, history
 
 
-@register_evaluator("wassa2024", "baseline")
-class WASSA2024Evaluator(BaseEvaluator):
+@register_evaluator("wassa2024", "multi_scorer")
+class WASSA2024MultiScorerEvaluator(BaseEvaluator):
 
     def __init__(self,
                  task_dir,
@@ -342,161 +349,202 @@ class WASSA2024Evaluator(BaseEvaluator):
                          model_name, model_api_key, model_api_base, evaluator_name, evaluator_api_key,
                          evaluator_api_base)
 
-    @property
-    def categories(self):
+    def task_mapping(self):
         return {
-            "conversation_emotion_polarity": {
-                "name": "Emotion Polarity at the speech-turn-level",
-                "label_key": "EmotionalPolarity",
-                "template": WASSA2024EvalTemplate(
-                    name="conversation_emotion_polarity",
-                    system="Read the conversation between speakers in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} as a score from the range : 0 to 2:\n\n",
-                    instruction="\n The score for the response on emotion polarity is ",
-                ),
-                "category": "CONV"
-            },
-            "conversation_emotion_intensity": {
-                "name": "Emotion Intensity at the speech-turn-level",
-                "label_key": "Emotion",
-                "template": WASSA2024EvalTemplate(
-                    name="conversation_emotion_intensity",
-                    system="Read the conversation between speakers in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} as a score from the range : 1 to 5:\n\n",
-                    instruction="\n The score for the response on emotion intensity is ",
-                ),
-                "category": "CONV"
-            },
-            "conversation_empathy": {
-                "name": "Empathy at the speech-turn-level",
-                "label_key": "Empathy",
-                "template": WASSA2024EvalTemplate(
-                    name="conversation_empathy",
-                    system="Read the conversation between speakers in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} as a score from the range : 1 to 5:\n\n",
-                    instruction="\n The score for the response on empathy is ",
-                ),
-                "category": "CONV"
-            },
-            "essay_empathy": {
-                "name": "Empathy at the essay-level",
-                "label_key": "empathy",
-                "template": WASSA2024EvalTemplate(
-                    name="essay_empathy",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Empathy score is an average of 7-point scale ratings, representing each of the following states (warm, tender, sympathetic,softhearted, moved, compassionate). Try to predict {subject} as a score from the range : 1 to 7:\n\n",
-                    instruction="\n The score for the response on empathy is ",
-                ),
-                "category": "EMP"
-            },
-            "essay_distress": {
-                "name": "Personal Distress at the essay-level",
-                "label_key": "distress",
-                "template": WASSA2024EvalTemplate(
-                    name="essay_distress",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Distress score is an average of 7-point scale ratings, representing each of the following states (worried, upset, troubled, perturbed, grieved, disturbed, alarmed,distressed). Try to predict {subject} as a score from the range : 1 to 7:\n\n",
-                    instruction="\n The score for the response on distress is ",
-                ),
-                "category": "EMP"
-            },
-            "essay_emotion": {
-                "name": "Emotion at the essay-level",
-                "label_key": "emotion",
-                "template": WASSA2024EvalTemplate(
-                    name="essay_emotion",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} from one or more emotion labels from the Ekman’s six basic emotions (sadness, joy, disgust, surprise, anger, or fear) as well as neutral:\n\n",
-                    instruction="\nThe essay expresses the emotion ",
-                ),
-                "category": "EMO"
-            },
-            "writer_conscientiousness": {
-                "name": "Conscientiousness of the essay writer",
-                "label_key": "personality_conscientiousness",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_conscientiousness",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n\n",
-                    instruction="\nThe score for the Conscientiousness of the essay writer is ",
-                ),
-                "category": "PER"
-            },
-            "writer_openness": {
-                "name": "Openness to experience of the essay writer",
-                "label_key": "personality_openess",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_openness",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n\n",
-                    instruction="\nThe score for the Openness to experience of the essay writer is ",
-                ),
-                "category": "PER"
-            },
-            "writer_extraversion": {
-                "name": "Extraversion of the essay writer",
-                "label_key": "personality_extraversion",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_openness",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n\n",
-                    instruction="\nThe score for the Extraversion of the essay writer is ",
-                ),
-                "category": "PER"
-            },
-            "writer_agreeableness": {
-                "name": "Agreeableness of the essay writer",
-                "label_key": "personality_agreeableness",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_agreeableness",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n\n",
-                    instruction="\nThe score for the Agreeableness of the essay writer is ",
-                ),
-                "category": "PER"
-            },
-            "writer_stability": {
-                "name": "Stability of the essay writer",
-                "label_key": "personality_stability",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_agreeableness",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n\n",
-                    instruction="\nThe score for the Stability of the essay writer is ",
-                ),
-                "category": "PER"
-            },
-            "writer_perspective_taking": {
-                "name": "Perspective-taking of the essay writer",
-                "label_key": "iri_perspective_taking",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_perspective_taking",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n\n",
-                    instruction="\nThe score for the Perspective-taking of the essay writer is ",
-                ),
-                "category": "IRI"
-            },
-            "writer_personal_distress": {
-                "name": "Personal distress of the essay writer",
-                "label_key": "iri_personal_distress",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_personal_distress",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n\n",
-                    instruction="\nThe score for the Personal distress of the essay writer is ",
-                ),
-                "category": "IRI"
-            },
-            "writer_fantasy": {
-                "name": "Fantasy of the essay writer",
-                "label_key": "iri_fantasy",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_fantasy",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n\n",
-                    instruction="\nThe score for the Fantasy of the essay writer is ",
-                ),
-                "category": "IRI"
-            },
-            "writer_empathic_concern": {
-                "name": "Empathic Concern of the essay writer",
-                "label_key": "iri_empathatic_concern",
-                "template": WASSA2024EvalTemplate(
-                    name="writer_empatheic_concern",
-                    system="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict {subject} of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n\n",
-                    instruction="\nThe score for the Empathic Concern of the essay writer is ",
-                ),
-                "category": "IRI"
-            }
+            'CONVD': 'CONVD',
+            'CONVT': 'CONVT',
+            'EMP': 'EMP',
+            'PER': 'PER',
         }
 
     @property
-    def task_mapping(self):
-        return task_mapping
+    def categories(self):
+        return {
+            "CONVD": {
+                "name": "at the speech-turn-level",
+                "label_key": ["EmotionalPolarity", "Emotion", "Empathy"],
+                "template": WASSA2024EvalTemplate(
+                    name="conversation",
+                    instruction="Read the conversation between speakers in reaction to a news article where there is harm to a person, group, or other. Try to predict:\n"
+                                "1. EmotionalPolarity: as a score from the range : 0 to 2 ;\n"
+                                "2. Emotion: as a score from the range : 1 to 5 ;\n"
+                                "3. Empathy: as a score from the range : 1 to 5 .\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {\"EmotionalPolarity\": 1.3, \"Emotion\": 3.6, \"Empathy\": 4.3}\n"
+                          "```",
+                ),
+                "category": "CONV"
+            },
+            "CONVT": {
+                "name": "Emotion at the essay-level",
+                "label_key": ["emotion"],
+                "template": WASSA2024EvalTemplate(
+                    name="essay_emotion",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict Emotion at the essay-level from one or more emotion labels from the Ekman’s six basic emotions (sadness, joy, disgust, surprise, anger, or fear) as well as neutral. The essay expresses the emotion:\n\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {\"emotion\": \"disgust\"}\n"
+                          "```",
+                ),
+                "category": "EMO"
+            },
+            "EMP": {
+                "name": "Empathy at the essay-level",
+                "label_key": ["empathy", "distress"],
+                "template": WASSA2024EvalTemplate(
+                    name="essay",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Empathy score is an average of 7-point scale ratings, representing each of the following states (warm, tender, sympathetic,softhearted, moved, compassionate). Try to predict:\n"
+                                "1. empathy as a score from the range : 1 to 7:\n"
+                                "2. distress as a score from the range : 1 to 7:\n"
+                                "\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {\"empathy\": 5.8, \"distress\": 2.5}\n"
+                          "```",
+                ),
+                "category": "EMP"
+            },
+            "PER": {
+                "name": "essay writer",
+                "label_key": [
+                    "personality_conscientiousness",
+                    "personality_openness",
+                    "personality_extraversion",
+                    "personality_agreeableness",
+                    "personality_stability"
+                ],
+                "template": WASSA2024EvalTemplate(
+                    name="writer_conscientiousness",
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n"
+                                "1. personality_conscientiousness:\n"
+                                "2. personality_openness\n"
+                                "3. personality_extraversion\n"
+                                "4. personality_agreeableness\n"
+                                "5. personality_stability\n"
+                                "\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {\"personality_conscientiousness\": 1.3, \"personality_openness\": 3.6, \"personality_extraversion\": 4.3, \"personality_agreeableness\": 3.6, \"personality_stability\": 4.3}\n"
+                          "```",
+                ),
+                "category": "PER"
+            },
+            # "IRI": {
+            #     "name": "Perspective-taking of the essay writer",
+            #     "label_key": [
+            #         "iri_perspective_taking",
+            #         "iri_personal_distress",
+            #         "iri_fantasy",
+            #         "iri_empathetic_concern"
+            #     ],
+            #     "template": WASSA2023EvalTemplate(
+            #         name="writer_perspective_taking",
+            #         instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Interpersonal Reactivity Index (IRI), a measurement tool for the multidimensional assessment of empathy, as a score from the range : 1 to 5:\n"
+            #                     "1. iri_perspective_taking\n"
+            #                     "2. iri_personal_distress\n"
+            #                     "3. iri_fantasy\n"
+            #                     "4. iri_empathetic_concern\n"
+            #                     "\n",
+            #         input="Provide your evaluation in JSON format, as shown in the example below.\n"
+            #               "Example of Evaluation Output:\n"
+            #               "```json\n"
+            #               "  {\"iri_perspective_taking\": 1.3, \"iri_personal_distress\": 3.6, \"iri_fantasy\": 4.3, \"iri_empathetic_concern\": 3.6}\n"
+            #               "```",
+            #     ),
+            #     "category": "IRI"
+            # }
+        }
+
+    @classmethod
+    def parse_example(
+            cls,
+            template,
+            example: Dict[str, str],
+            label_key,
+            dataset_name
+    ) -> Tuple[str, str]:
+        article = "[Article]\n{article}\n[End of Article]".format(article=example['article'])
+        label = {lk: "{:.2f}".format(example[lk]) if isinstance(example[lk], float) else example[lk] for lk in
+                 label_key}
+        if dataset_name == 'conversation':
+            conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=example['history'])
+            response = "[Response by Speaker {speaker_id}]\n{text}\n[End of Response by Speaker {speaker_id}]".format(
+                speaker_id=example['speaker_id'],
+                text=example['text'])
+            query, resp = "\n\n".join(
+                [article] + [conversation] + [response] + [template.instruction] + [template.input]), json.dumps(label)
+        else:
+            essay = "[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
+                speaker_id=example['speaker_id'],
+                essay=example['essay'])
+            query, resp = "\n\n".join([article] + [essay] + [template.instruction] + [template.input]), json.dumps(
+                label)
+        logger.debug(query)
+        logger.debug(resp)
+        return query, resp
+
+    def run(self, split, n_shot, output_dir, num_retries=5):
+        ref_dir = os.path.join(output_dir, split, "ref")
+        res_dir = os.path.join(output_dir, split, "res")
+        ret_dir = os.path.join(output_dir, split, "ret")
+        [os.makedirs(d, exist_ok=True) for d in [ref_dir, res_dir, ret_dir]]
+
+        pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
+        logger.debug("=============================================================")
+        for subject in pbar:
+            dataset_name = self.task_mapping[self.categories[subject]['category']]
+            dataset = load_dataset(
+                path=os.path.join(self.task_dir, self.task),
+                name=dataset_name,
+            )
+            pbar.set_postfix_str(self.categories[subject]["name"])
+            eval_template = self.categories[subject]['template']
+
+            category = self.categories[subject]['category']
+            label_key = self.categories[subject]['label_key']
+
+            task_file = os.path.join(res_dir, f'predictions_{category}.tsv')
+            if not os.path.exists(task_file):
+                with open(task_file, "w") as fd:
+                    for i in trange(len(dataset[split]), desc=subject + "---" + dataset_name, position=1, leave=False):
+                        logger.debug("---------------------------------------------------------------")
+                        support_set = dataset["train"].shuffle().select(
+                            range(min(n_shot, len(dataset["train"]))))
+                        target_data = dataset[split][i]
+                        logger.debug(f"Example: {target_data}")
+                        subject_name = self.categories[subject]["name"]
+                        messages = eval_template.format_example(
+                            target_data=target_data,
+                            support_set=support_set,
+                            subject_name=subject_name,
+                            label_key=label_key,
+                            dataset_name=dataset_name,
+                            use_history=True,
+                            parse_func=self.parse_example
+                        )
+
+                        result = None
+                        while not result:
+                            response = self.prompt_for_response(messages, num_retries)
+                            try:
+                                result = [response[k] for k in label_key]
+                                logger.debug(result)
+                            except Exception as e:
+                                logger.warning(f"Error response for {subject}: {response}, {e}")
+
+                        fd.write(
+                            "\t".join(map(lambda x: x if isinstance(x, str) else "{:.2f}".format(x), result)) + "\n")
+
+        if split == "validation":
+            with zipfile.ZipFile(os.path.join(self.task_dir, self.task, f'{self.task}.zip')) as zd:
+                for filename in zd.namelist():
+                    if filename in ['goldstandard_dev.tsv', 'goldstandard_CONV_dev.tsv']:
+                        with open(os.path.join(ref_dir, filename.replace("_dev", "")), 'wb') as fd:
+                            with zd.open(filename) as f:
+                                fd.write(f.read())
+            score(os.path.join(output_dir, split), ret_dir)

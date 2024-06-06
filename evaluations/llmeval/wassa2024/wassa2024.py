@@ -142,14 +142,14 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                     "income": datasets.Value("string"),
                     "perceived_empathy": datasets.Value("string"),
                     "personality_conscientiousness": datasets.Value("float32"),
-                    "personality_openess": datasets.Value("float32"),
+                    "personality_openness": datasets.Value("float32"),
                     "personality_extraversion": datasets.Value("float32"),
                     "personality_agreeableness": datasets.Value("float32"),
                     "personality_stability": datasets.Value("float32"),
                     "iri_perspective_taking": datasets.Value("float32"),
                     "iri_personal_distress": datasets.Value("float32"),
                     "iri_fantasy": datasets.Value("float32"),
-                    "iri_empathatic_concern": datasets.Value("float32"),
+                    "iri_empathetic_concern": datasets.Value("float32"),
                 }
             )
         else:
@@ -305,4 +305,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                     instance['perceived_empathy'] = dialogue[instance['person_id']]
                 except KeyError:
                     print(f"Person {instance['person_id']} has no records perceiving empathy of other person!")
+
+                instance['personality_openness'] = instance.pop("personality_openess")
+                instance['iri_empathetic_concern'] = instance.pop("iri_empathatic_concern")
                 yield i, instance
