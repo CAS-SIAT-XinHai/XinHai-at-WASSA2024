@@ -1,11 +1,11 @@
 import csv
+import json
 import logging
 import os
 import os.path
 import sys
-import zipfile
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 from datasets import load_dataset
 from math import sqrt
@@ -280,33 +280,10 @@ def score(input_dir, output_dir):
 @dataclass
 class WASSA2024EvalTemplate:
     name: str
-    system: str
+    instruction: str
     # article: str
     # essay: str
-    instruction: str
-
-    def parse_example(
-            self,
-            example: Dict[str, str],
-            label_key,
-            dataset_name
-    ) -> Tuple[str, str]:
-        # print(json.dumps(example, indent=2))
-        article = "\nArticle: {article}".format(article=example['article'])
-        label = example[label_key]
-        if dataset_name == 'conversation':
-            conversation = "\nConversation between speakers: {history}".format(history=example['history'])
-            response = "\nResponse by Speaker {speaker_id}: {text}".format(speaker_id=example['speaker_id'],
-                                                                           text=example['text'])
-            if isinstance(label, float):
-                label = "{:.2f}".format(label)
-            return "".join([article] + [conversation] + [response] + [self.instruction]), label
-        else:
-            essay = "\nEssay written by Speaker {speaker_id}: {essay}".format(speaker_id=example['speaker_id'],
-                                                                              essay=example['essay'])
-            if isinstance(label, float):
-                label = "{:.2f}".format(label)
-            return "".join([article] + [essay] + [self.instruction]), label
+    input: str
 
     def format_example(
             self,
@@ -316,22 +293,42 @@ class WASSA2024EvalTemplate:
             label_key: str,
             dataset_name: str,
             use_history: bool,
-    ) -> Tuple[str, str, List[Tuple[str, str]]]:
-        query, resp = self.parse_example(target_data, label_key=label_key, dataset_name=dataset_name)
-        history = [self.parse_example(support_set[k], label_key=label_key, dataset_name=dataset_name) for k in
+            parse_func
+    ) -> list[list[dict[str, str] | dict[str, str]] | dict[str, str]]:
+        """
+        use_history: whether to use history or not.
+        """
+        query, resp = parse_func(self, target_data, label_key=label_key, dataset_name=dataset_name)
+        history = [parse_func(self, support_set[k], label_key=label_key, dataset_name=dataset_name) for k in
                    range(len(support_set))]
 
         if len(history):
             temp = history.pop(0)
-            history.insert(0, (self.system.format(subject=subject_name) + temp[0], temp[1]))
+            history.insert(0, (self.instruction + temp[0], temp[1]))
         else:
-            query = self.system.format(subject=subject_name) + query
+            query = self.instruction + query
+
+        messages = []
 
         if not use_history:
             query = "\n\n".join(["".join(item) for item in history] + [query])
-            history = []
+        else:
+            for u, a in history:
+                messages.append([{
+                    "role": "user",
+                    "content": u
+                }, {
+                    "role": "assistant",
+                    "content": a
+                }])
         # print(history, query)
-        return query.strip(), resp, history
+        messages.append(
+            {
+                "role": "user",
+                "content": query,
+            }
+        )
+        return messages
 
 
 @register_evaluator("wassa2024", "multi_scorer")
@@ -349,6 +346,7 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
                          model_name, model_api_key, model_api_base, evaluator_name, evaluator_api_key,
                          evaluator_api_base)
 
+    @property
     def task_mapping(self):
         return {
             'CONVD': 'CONVD',
@@ -361,49 +359,53 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
     def categories(self):
         return {
             "CONVD": {
-                "name": "at the speech-turn-level",
-                "label_key": ["EmotionalPolarity", "Emotion", "Empathy"],
+                "name": "at the speech dialogue level",
+                "label_key": ["perceived_empathy"],
+                "template": WASSA2024EvalTemplate(
+                    name="essay_emotion",
+                    instruction="Read the dialogue between speakers after reading a news article where there is harm to a person, group, or other. "
+                                "Try to predict the perceived empathy of the conversation partner Speaker {person_id}:\n\n",
+                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
+                          "Example of Evaluation Output:\n"
+                          "```json\n"
+                          "  {\"perceived_empathy\": }\n"
+                          "```",
+                ),
+                "category": "CONVD"
+            },
+            "CONVT": {
+                "name": "at the speech turn level",
+                "label_key": ["EmotionalPolarity", "EmotionalIntensity", "Empathy"],
                 "template": WASSA2024EvalTemplate(
                     name="conversation",
-                    instruction="Read the conversation between speakers in reaction to a news article where there is harm to a person, group, or other. Try to predict:\n"
+                    instruction="Read the conversation between speakers in reaction to a news article where there is harm to a person, group, or other. "
+                                "Try to predict:\n"
                                 "1. EmotionalPolarity: as a score from the range : 0 to 2 ;\n"
-                                "2. Emotion: as a score from the range : 1 to 5 ;\n"
+                                "2. EmotionalIntensity: as a score from the range : 1 to 5 ;\n"
                                 "3. Empathy: as a score from the range : 1 to 5 .\n",
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {\"EmotionalPolarity\": 1.3, \"Emotion\": 3.6, \"Empathy\": 4.3}\n"
+                          "  {\"EmotionalPolarity\": 1.3, \"EmotionalIntensity\": 3.6, \"Empathy\": 4.3}\n"
                           "```",
                 ),
-                "category": "CONV"
-            },
-            "CONVT": {
-                "name": "Emotion at the essay-level",
-                "label_key": ["emotion"],
-                "template": WASSA2024EvalTemplate(
-                    name="essay_emotion",
-                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict Emotion at the essay-level from one or more emotion labels from the Ekman’s six basic emotions (sadness, joy, disgust, surprise, anger, or fear) as well as neutral. The essay expresses the emotion:\n\n",
-                    input="Provide your evaluation in JSON format, as shown in the example below.\n"
-                          "Example of Evaluation Output:\n"
-                          "```json\n"
-                          "  {\"emotion\": \"disgust\"}\n"
-                          "```",
-                ),
-                "category": "EMO"
+                "category": "CONVT"
             },
             "EMP": {
                 "name": "Empathy at the essay-level",
-                "label_key": ["empathy", "distress"],
+                "label_key": ["person_empathy", "person_distress"],
                 "template": WASSA2024EvalTemplate(
                     name="essay",
-                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Empathy score is an average of 7-point scale ratings, representing each of the following states (warm, tender, sympathetic,softhearted, moved, compassionate). Try to predict:\n"
-                                "1. empathy as a score from the range : 1 to 7:\n"
-                                "2. distress as a score from the range : 1 to 7:\n"
+                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. "
+                                "Empathy score is an average of 7-point scale ratings, representing each of the following states (warm, tender, sympathetic,softhearted, moved, compassionate). "
+                                "Try to predict:\n"
+                                "1. person_empathy as a score from the range : 1 to 7:\n"
+                                "2. person_distress as a score from the range : 1 to 7:\n"
                                 "\n",
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {\"empathy\": 5.8, \"distress\": 2.5}\n"
+                          "  {\"person_empathy\": 5.8, \"person_distress\": 2.5}\n"
                           "```",
                 ),
                 "category": "EMP"
@@ -419,7 +421,8 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
                 ],
                 "template": WASSA2024EvalTemplate(
                     name="writer_conscientiousness",
-                    instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. Try to predict metrics of the Big 5 personality traits ( also known as the OCEAN model ) as a score from the range : 1 to 7:\n"
+                    instruction="Read the perceived empathy of a speaker in reaction to news articles where there is harm to a person, group, or other. "
+                                "Try to predict metrics of the Big 5 personality traits ( also known as the OCEAN model ) for the speaker as a score from the range : 1 to 7:\n"
                                 "1. personality_conscientiousness:\n"
                                 "2. personality_openness\n"
                                 "3. personality_extraversion\n"
@@ -468,21 +471,37 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
             label_key,
             dataset_name
     ) -> Tuple[str, str]:
-        article = "[Article]\n{article}\n[End of Article]".format(article=example['article'])
         label = {lk: "{:.2f}".format(example[lk]) if isinstance(example[lk], float) else example[lk] for lk in
                  label_key}
-        if dataset_name == 'conversation':
+        if dataset_name == "CONVD":
+            article = "[Article]\n{article}\n[End of Article]".format(article=example['article'])
+            conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=example['history'])
+            query, resp = "\n\n".join(
+                [article, conversation, template.instruction.format(person_id=example["person_id"]),
+                 template.input]), json.dumps(label)
+        elif dataset_name == 'CONVT':
+            article = "[Article]\n{article}\n[End of Article]".format(article=example['article'])
             conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=example['history'])
             response = "[Response by Speaker {speaker_id}]\n{text}\n[End of Response by Speaker {speaker_id}]".format(
                 speaker_id=example['speaker_id'],
                 text=example['text'])
             query, resp = "\n\n".join(
-                [article] + [conversation] + [response] + [template.instruction] + [template.input]), json.dumps(label)
+                [article, conversation, response, template.instruction, template.input]), json.dumps(label)
+        elif dataset_name == 'EMP':
+            article = "[Article]\n{article}\n[End of Article]".format(article=example['article'])
+            conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=example['history'])
+            response = "[Response by Speaker {speaker_id}]\n{text}\n[End of Response by Speaker {speaker_id}]".format(
+                speaker_id=example['speaker_id'],
+                text=example['text'])
+            query, resp = "\n\n".join(
+                [article, conversation, response, template.instruction, template.input]), json.dumps(label)
         else:
+            perceived_empathy = json.loads(example['perceived_empathy'])
+            print(perceived_empathy)
             essay = "[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
                 speaker_id=example['speaker_id'],
                 essay=example['essay'])
-            query, resp = "\n\n".join([article] + [essay] + [template.instruction] + [template.input]), json.dumps(
+            query, resp = "\n\n".join([article, essay, template.instruction, template.input]), json.dumps(
                 label)
         logger.debug(query)
         logger.debug(resp)
@@ -496,6 +515,7 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
 
         pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
         logger.debug("=============================================================")
+        labels = {}
         for subject in pbar:
             dataset_name = self.task_mapping[self.categories[subject]['category']]
             dataset = load_dataset(
@@ -539,12 +559,13 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
 
                         fd.write(
                             "\t".join(map(lambda x: x if isinstance(x, str) else "{:.2f}".format(x), result)) + "\n")
+                        if split == "validation":
+                            labels.setdefault(dataset_name, [])
+                            labels[dataset_name].append([target_data[k] for k in label_key])
 
         if split == "validation":
-            with zipfile.ZipFile(os.path.join(self.task_dir, self.task, f'{self.task}.zip')) as zd:
-                for filename in zd.namelist():
-                    if filename in ['goldstandard_dev.tsv', 'goldstandard_CONV_dev.tsv']:
-                        with open(os.path.join(ref_dir, filename.replace("_dev", "")), 'wb') as fd:
-                            with zd.open(filename) as f:
-                                fd.write(f.read())
+            for dataset_name in labels:
+                with open(os.path.join(ref_dir, f"goldstandard_{dataset_name}".tsv), 'w') as fd:
+                    for v in labels[dataset_name]:
+                        fd.write("\t".join(map(str, v)) + "\n")
             score(os.path.join(output_dir, split), ret_dir)

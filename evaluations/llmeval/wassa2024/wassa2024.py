@@ -111,7 +111,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                     "person_id_2": datasets.Value("string"),
                     "article": datasets.Value("string"),
                     "EmotionalPolarity": datasets.Value("float32"),
-                    "Emotion": datasets.Value("float32"),
+                    "EmotionalIntensity": datasets.Value("float32"),
                     "Empathy": datasets.Value("float32"),
                 }
             )
@@ -262,6 +262,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                 except KeyError:
                     print(f"Conversation {instance['conversation_id']} has no history")
                     instance['history'] = ""
+                instance["EmotionalIntensity"] = instance.pop("Emotion")
                 yield i, instance
         elif self.config.name == 'EMP':
             merged_df = pd.merge(df_emp, df_articles, on='article_id', how='inner')
