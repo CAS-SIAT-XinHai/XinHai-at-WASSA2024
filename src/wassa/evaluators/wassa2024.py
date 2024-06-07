@@ -490,18 +490,28 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
         elif dataset_name == 'EMP':
             article = "[Article]\n{article}\n[End of Article]".format(article=example['article'])
             conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=example['history'])
-            response = "[Response by Speaker {speaker_id}]\n{text}\n[End of Response by Speaker {speaker_id}]".format(
-                speaker_id=example['speaker_id'],
-                text=example['text'])
+            response = "[Essay by Speaker {person_id}]\n{person_essay}\n[End of Essay by Speaker {person_id}]".format(
+                person_id=example['person_id'],
+                person_essay=example['person_essay'])
             query, resp = "\n\n".join(
                 [article, conversation, response, template.instruction, template.input]), json.dumps(label)
         else:
-            perceived_empathy = json.loads(example['perceived_empathy'])
-            print(perceived_empathy)
-            essay = "[Essay by Speaker {speaker_id}]\n{essay}\n[End of Essay by Speaker {speaker_id}]".format(
-                speaker_id=example['speaker_id'],
-                essay=example['essay'])
-            query, resp = "\n\n".join([article, essay, template.instruction, template.input]), json.dumps(
+            print(example['perceived_empathy'])
+            perceived_empathy = eval(example['perceived_empathy'])
+            for p in perceived_empathy:
+                print(p)
+                article = "[Article]\n{article}\n[End of Article]".format(article=p['article'])
+                conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=p['history'])
+                perceived_query, resp = "\n\n".join(
+                    [article, conversation, template.instruction.format(person_id=p["person_id"]),
+                     template.input]), json.dumps(label)
+                break
+
+            perceived_query = "[Perceived history of Speaker {person_id}]{perceived_query}[End of Perceived history of Speaker {person_id}]".format(
+                person_id=example["person_id"],
+                perceived_query=perceived_query)
+
+            query, resp = "\n\n".join([perceived_query, template.instruction, template.input]), json.dumps(
                 label)
         logger.debug(query)
         logger.debug(resp)
