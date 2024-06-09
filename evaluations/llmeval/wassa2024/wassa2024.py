@@ -179,25 +179,34 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
         df_conversations_dialogue_train = pd.read_csv(f"{data_dir}/trac1_CONVD_train.csv", escapechar='\\')
         df_conversations_dialogue_train.rename(columns={'person_id_1': 'person_id'}, inplace=True)
         df_conversations_dialogue_dev = pd.read_csv(f"{data_dir}/trac1_CONVD_dev.csv", escapechar='\\')
+        df_conversations_dialogue_test = pd.read_csv(f"{data_dir}/test_data/trac1_CONVD_test.csv", escapechar='\\')
 
         df_conversations_turn_train = pd.read_csv(f"{data_dir}/trac2_CONVT_train.csv",
                                                   escapechar='\\')
         df_conversations_turn_dev = pd.read_csv(f"{data_dir}/trac2_CONVT_dev.csv",
                                                 escapechar='\\')
+        df_conversations_turn_test = pd.read_csv(f"{data_dir}/test_data/trac2_CONVT_test.csv",
+                                                escapechar='\\')
+
         df_emp_train = pd.read_csv(f"{data_dir}/trac3_EMP_train.csv", escapechar='\\')
         df_emp_dev = pd.read_csv(f"{data_dir}/trac3_EMP_dev.csv", escapechar='\\')
+        df_emp_test = pd.read_csv(f"{data_dir}/test_data/trac3_EMP_test.csv", escapechar='\\')
 
         df_per_train = pd.read_csv(f"{data_dir}/trac4_PER_train.csv", escapechar='\\')
         df_per_dev = pd.read_csv(f"{data_dir}/trac4_PER_dev.csv", escapechar='\\')
+        df_per_test = pd.read_csv(f"{data_dir}/test_data/trac4_PER_test.csv", escapechar='\\')
 
         return [
-            # datasets.SplitGenerator(
-            #     name=datasets.Split.TEST,
-            #     gen_kwargs={
-            #         "filepath": test_file,
-            #         "df_articles": df_articles_dev
-            #     },
-            # ),
+            datasets.SplitGenerator(
+                name=datasets.Split.TEST,
+                gen_kwargs={
+                    "df_articles": df_articles_dev,
+                    "df_conversations_dialogue": df_conversations_dialogue_test,
+                    "df_conversations_turn": df_conversations_turn_test,
+                    "df_emp": df_emp_test,
+                    "df_per": df_per_test,
+                },
+            ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
@@ -243,7 +252,11 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                 except KeyError:
                     print(f"Conversation {instance['conversation_id']} has no history")
                     instance['history'] = ""
-                instance['perceived_empathy'] = instance.pop("this_persons_perceived_empathy_of_other_person")
+
+                if "this_persons_perceived_empathy_of_other_person" in instance:
+                    instance['perceived_empathy'] = instance.pop("this_persons_perceived_empathy_of_other_person")
+                else:
+                    instance["perceived_empathy"] = 0
                 yield i, instance
         elif self.config.name == 'CONVT':
             df_conversations_turn.sort_values(['conversation_id', 'turn_id'], inplace=True)
@@ -262,7 +275,12 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                 except KeyError:
                     print(f"Conversation {instance['conversation_id']} has no history")
                     instance['history'] = ""
-                instance["EmotionalIntensity"] = instance.pop("Emotion")
+
+                if "Emotion" in instance:
+                    instance["EmotionalIntensity"] = instance.pop("Emotion")
+                else:
+                    instance["EmotionalIntensity"] = 0
+
                 yield i, instance
         elif self.config.name == 'EMP':
             merged_df = pd.merge(df_emp, df_articles, on='article_id', how='inner')
@@ -310,6 +328,14 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
                 except KeyError:
                     print(f"Person {instance['person_id']} has no records perceiving empathy of other person!")
 
-                instance['personality_openness'] = instance.pop("personality_openess")
-                instance['iri_empathetic_concern'] = instance.pop("iri_empathatic_concern")
+                if "personality_openess" in instance:
+                    instance['personality_openness'] = instance.pop("personality_openess")
+                else:
+                    instance['personality_openness'] = 0
+
+                if "iri_empathatic_concern" in instance:
+                    instance['iri_empathetic_concern'] = instance.pop("iri_empathatic_concern")
+                else:
+                    instance['iri_empathetic_concern'] = 0
+
                 yield i, instance

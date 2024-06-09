@@ -4,6 +4,7 @@ import logging
 import os
 import os.path
 import sys
+import zipfile
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -525,7 +526,7 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
 
         pbar = tqdm(self.categories.keys(), desc="Processing subjects", position=0)
         logger.debug("=============================================================")
-        labels = {}
+        # labels = {}
         for subject in pbar:
             dataset_name = self.task_mapping[self.categories[subject]['category']]
             dataset = load_dataset(
@@ -569,13 +570,25 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
 
                         fd.write(
                             "\t".join(map(lambda x: x if isinstance(x, str) else "{:.2f}".format(x), result)) + "\n")
-                        if split == "validation":
-                            labels.setdefault(dataset_name, [])
-                            labels[dataset_name].append([target_data[k] for k in label_key])
+                        # if split == "validation":
+                        # labels.setdefault(dataset_name, [])
+                        # labels[dataset_name].append([target_data[k] for k in label_key])
 
         if split == "validation":
-            for dataset_name in labels:
-                with open(os.path.join(ref_dir, f"goldstandard_{dataset_name}".tsv), 'w') as fd:
-                    for v in labels[dataset_name]:
-                        fd.write("\t".join(map(str, v)) + "\n")
+            # for dataset_name in labels:
+            #     with open(os.path.join(ref_dir, f"goldstandard_{dataset_name}".tsv), 'w') as fd:
+            #         for v in labels[dataset_name]:
+            #             fd.write("\t".join(map(str, v)) + "\n")
+            with zipfile.ZipFile(os.path.join(self.task_dir, self.task, f'{self.task}.zip')) as zd:
+                for filename in zd.namelist():
+                    if filename in [
+                        'ref/goldstandard_CONVD.csv',
+                        'ref/goldstandard_CONVP.csv',
+                        'ref/goldstandard_EMP.csv'
+                        'ref/goldstandard_PER.csv'
+                    ]:
+                        with open(os.path.join(ref_dir, os.path.basename(filename).replace(".csv", ".tsv")),
+                                  'wb') as fd:
+                            with zd.open(filename) as f:
+                                fd.write(f.read())
             score(os.path.join(output_dir, split), ret_dir)
