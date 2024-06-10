@@ -200,6 +200,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
+                    "split": datasets.Split.TEST,
                     "df_articles": df_articles_dev,
                     "df_conversations_dialogue": df_conversations_dialogue_test,
                     "df_conversations_turn": df_conversations_turn_test,
@@ -210,6 +211,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
+                    "split": datasets.Split.VALIDATION,
                     "df_articles": df_articles_dev,
                     "df_conversations_dialogue": df_conversations_dialogue_dev,
                     "df_conversations_turn": df_conversations_turn_dev,
@@ -220,6 +222,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
+                    "split": datasets.Split.TRAIN,
                     "df_articles": df_articles_train,
                     "df_conversations_dialogue": df_conversations_dialogue_train,
                     "df_conversations_turn": df_conversations_turn_train,
@@ -230,13 +233,14 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
         ]
 
     def _generate_examples(self,
+                           split,
                            df_articles,
                            df_conversations_dialogue,
                            df_conversations_turn,
                            df_emp,
                            df_per):
         if self.config.name == 'CONVD':
-            merged_df = pd.merge(df_conversations_dialogue, df_articles, on='article_id', how='inner')
+            merged_df = pd.merge(df_conversations_dialogue, df_articles, on='article_id', how='left')
             df_conversations_turn.sort_values(['conversation_id', 'turn_id'], inplace=True)
             history = {}
             for conversation_id, group_df in df_conversations_turn.groupby('conversation_id'):
@@ -283,7 +287,7 @@ class WASSA2024(datasets.GeneratorBasedBuilder):
 
                 yield i, instance
         elif self.config.name == 'EMP':
-            merged_df = pd.merge(df_emp, df_articles, on='article_id', how='inner')
+            merged_df = pd.merge(df_emp, df_articles, on='article_id', how='left')
             df_conversations_turn.sort_values(['conversation_id', 'turn_id'], inplace=True)
             history = {}
             for conversation_id, group_df in df_conversations_turn.groupby('conversation_id'):

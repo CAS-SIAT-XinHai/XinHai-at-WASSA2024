@@ -365,11 +365,11 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
                 "template": WASSA2024EvalTemplate(
                     name="essay_emotion",
                     instruction="Read the dialogue between speakers after reading a news article where there is harm to a person, group, or other. "
-                                "Try to predict the perceived empathy of the conversation partner Speaker {person_id}:\n\n",
+                                "Try to predict the perceived empathy of the conversation partner Speaker {person_id} as a score from the range 1 to 7:\n\n",
                     input="Provide your evaluation in JSON format, as shown in the example below.\n"
                           "Example of Evaluation Output:\n"
                           "```json\n"
-                          "  {\"perceived_empathy\": }\n"
+                          "  {\"perceived_empathy\": 6.2}\n"
                           "```",
                 ),
                 "category": "CONVD"
@@ -399,6 +399,7 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
                     name="essay",
                     instruction="Read the essay written by a speaker in reaction to a news article where there is harm to a person, group, or other. "
                                 "Empathy score is an average of 7-point scale ratings, representing each of the following states (warm, tender, sympathetic,softhearted, moved, compassionate). "
+                                "Distress score is an average of 7-point scale ratings, representing each of the following states (worried, upset, troubled, perturbed, grieved, disturbed, alarmed,distressed). "
                                 "Try to predict:\n"
                                 "1. person_empathy as a score from the range : 1 to 7:\n"
                                 "2. person_distress as a score from the range : 1 to 7:\n"
@@ -497,10 +498,14 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
             query, resp = "\n\n".join(
                 [article, conversation, response, template.instruction, template.input]), json.dumps(label)
         else:
-            print(example['perceived_empathy'])
-            perceived_empathy = eval(example['perceived_empathy'])
+            try:
+                perceived_empathy = eval(example['perceived_empathy'])
+            except TypeError:
+                logger.error(example['perceived_empathy'])
+                perceived_empathy = []
+
+            perceived_query = ""
             for p in perceived_empathy:
-                print(p)
                 article = "[Article]\n{article}\n[End of Article]".format(article=p['article'])
                 conversation = "[Conversation]\n{history}\n[End of Conversation]".format(history=p['history'])
                 perceived_query, resp = "\n\n".join(
@@ -508,9 +513,10 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
                      template.input]), json.dumps(label)
                 break
 
-            perceived_query = "[Perceived history of Speaker {person_id}]{perceived_query}[End of Perceived history of Speaker {person_id}]".format(
-                person_id=example["person_id"],
-                perceived_query=perceived_query)
+            if perceived_query:
+                perceived_query = "[Perceived history of Speaker {person_id}]{perceived_query}[End of Perceived history of Speaker {person_id}]".format(
+                    person_id=example["person_id"],
+                    perceived_query=perceived_query)
 
             query, resp = "\n\n".join([perceived_query, template.instruction, template.input]), json.dumps(
                 label)
@@ -568,8 +574,14 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
                             except Exception as e:
                                 logger.warning(f"Error response for {subject}: {response}, {e}")
 
-                        fd.write(
-                            "\t".join(map(lambda x: x if isinstance(x, str) else "{:.2f}".format(x), result)) + "\n")
+                            try:
+                                fd.write(
+                                    "\t".join(
+                                        map(lambda x: x if isinstance(x, str) else "{:.2f}".format(x), result)) + "\n")
+                            except Exception as e:
+                                logger.warning(f"Error response for {subject}: {response}, {e}")
+                                result = None
+
                         # if split == "validation":
                         # labels.setdefault(dataset_name, [])
                         # labels[dataset_name].append([target_data[k] for k in label_key])
@@ -582,12 +594,12 @@ class WASSA2024MultiScorerEvaluator(BaseEvaluator):
             with zipfile.ZipFile(os.path.join(self.task_dir, self.task, f'{self.task}.zip')) as zd:
                 for filename in zd.namelist():
                     if filename in [
-                        'ref/goldstandard_CONVD.csv',
-                        'ref/goldstandard_CONVP.csv',
-                        'ref/goldstandard_EMP.csv'
-                        'ref/goldstandard_PER.csv'
+                        'ref/goldstandard_CONVD.tsv',
+                        'ref/goldstandard_CONVT.tsv',
+                        'ref/goldstandard_EMP.tsv',
+                        'ref/goldstandard_PER.tsv'
                     ]:
-                        with open(os.path.join(ref_dir, os.path.basename(filename).replace(".csv", ".tsv")),
+                        with open(os.path.join(ref_dir, os.path.basename(filename)),
                                   'wb') as fd:
                             with zd.open(filename) as f:
                                 fd.write(f.read())

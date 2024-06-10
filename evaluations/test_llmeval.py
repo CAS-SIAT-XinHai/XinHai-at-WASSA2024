@@ -23,9 +23,10 @@ def test(
         dataset = load_dataset(os.path.join(dataset_dir, task), subject,
                                download_mode="force_redownload")
         for i, item in enumerate(dataset[split]):
-            if i < 5:
-                print(i, json.dumps(item, indent=2, ensure_ascii=False))
+            # if i < 5:
+            #     print(i, json.dumps(item, indent=2, ensure_ascii=False))
             question_types.update([item.get('question_type')])
+        print(subject, i)
     print(question_types)
 
 
